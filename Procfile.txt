@@ -1,0 +1,1 @@
+web: python ruleta_fiscal.py
