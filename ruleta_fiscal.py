@@ -436,7 +436,7 @@ def set_play_pause(n_play, n_pause, playing):
 )
 def tick_year(n, playing, year):
     if not playing:
-        return year
+        return no_update
     y = int(year)
     return min_year if y >= max_year else (y + 1)
 
