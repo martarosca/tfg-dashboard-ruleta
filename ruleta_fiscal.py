@@ -411,6 +411,7 @@ app.layout = html.Div(style={"backgroundColor": BG, "color": FG, "minHeight": "1
 @app.callback(
     Output("store_playing_year", "data"),
     Output("interval_year", "disabled"),
+    Output("interval_year", "n_intervals"),
     Input("btn_play", "n_clicks"),
     Input("btn_pause", "n_clicks"),
     State("store_playing_year", "data"),
@@ -418,11 +419,14 @@ app.layout = html.Div(style={"backgroundColor": BG, "color": FG, "minHeight": "1
 )
 def set_play_pause(n_play, n_pause, playing):
     trig = ctx.triggered_id
+
     if trig == "btn_play":
-        return True, False
+        return True, False, 0
+
     if trig == "btn_pause":
-        return False, True
-    return playing, (not bool(playing))
+        return False, True, no_update
+
+    return playing, (not bool(playing)), no_update
 
 
 # ----------------------------
