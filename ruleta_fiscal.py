@@ -408,39 +408,32 @@ app.layout = html.Div(style={"backgroundColor": BG, "color": FG, "minHeight": "1
 # ----------------------------
 # PLAY/PAUSE YEAR
 # ----------------------------
+# ----------------------------
+# PLAY/PAUSE YEAR
+# ----------------------------
 @app.callback(
-    Output("store_playing_year", "data"),
     Output("interval_year", "disabled"),
-    Output("interval_year", "n_intervals"),
     Input("btn_play", "n_clicks"),
     Input("btn_pause", "n_clicks"),
-    State("store_playing_year", "data"),
     prevent_initial_call=True
 )
-def set_play_pause(n_play, n_pause, playing):
+def set_play_pause(n_play, n_pause):
     trig = ctx.triggered_id
-
-    if trig == "btn_play":
-        return True, False, 0
-
-    if trig == "btn_pause":
-        return False, True, no_update
-
-    return playing, (not bool(playing)), no_update
+    return False if trig == "btn_play" else True
 
 
 # ----------------------------
-# AUTO-ADVANCE YEAR WHEN PLAYING
+# AUTO-ADVANCE YEAR
 # ----------------------------
 @app.callback(
     Output("year", "value"),
     Input("interval_year", "n_intervals"),
-    State("store_playing_year", "data"),
     State("year", "value"),
 )
-def tick_year(n, playing, year):
-    if not playing:
-        return no_update
+def tick_year(n, year):
+    if year is None:
+        year = min_year
+
     y = int(year)
     return min_year if y >= max_year else (y + 1)
 
