@@ -647,23 +647,23 @@ def update_all(year, window, metric, selected_country, community_value, rotation
     if selected is not None:
         fig_title += f" | País: {selected}"
 
-    fig = make_ruleta_figure(
-    nodes=nodes,
-    part=part,
-    iso_to_name=iso_to_name,
-    selected=selected,
-    neighbors=neighbors_filtered,
-    corr_of_selected=corr_of_selected,
-    thr=THR_DEFAULT,
-    title=fig_title,
-    rotation_phase=float(rotation_phase)
-)
+        fig = make_ruleta_figure(
+        nodes=nodes,
+        part=part,
+        iso_to_name=iso_to_name,
+        selected=selected,
+        neighbors=neighbors_filtered,
+        corr_of_selected=corr_of_selected,
+        thr=THR_DEFAULT,
+        title=fig_title,
+        rotation_phase=float(rotation_phase)
+    )
 
-fig.update_layout(
-    datarevision=f"{year}-{window}-{metric}-{selected}-{community_value}-{rotation_phase}"
-)
+    fig.update_layout(
+        datarevision=f"{year}-{window}-{metric}-{selected}-{community_value}-{rotation_phase}"
+    )
 
-return fig, status, options, community_value, neighbors_text
+    return fig, status, options, community_value, neighbors_text
 
 app.clientside_callback(
     """
