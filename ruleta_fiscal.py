@@ -1,22 +1,21 @@
 # ==========================================
-#  ruleta_fiscal_evento2.py
+#  ruleta_fiscal.py
 #  Ruleta fiscal: Louvain + Glow + Play/Pause
-#  ROTACIÓN SOLO CUANDO CAMBIA EL PAÍS (NO GIRO INFINITO)
-#  (Arregla Duplicate callback outputs: 1 solo callback para la animación)
 # ==========================================
 
 import math
+import os
+from typing import Optional, Dict, List, Tuple, Set
+
 import numpy as np
 import pandas as pd
 import networkx as nx
 import community as community_louvain
 
-from typing import Optional, Dict, List, Tuple, Set
-
-from dash import Dash, dcc, html, Input, Output, State, ctx, no_update
+from dash import Dash, dcc, html, Input, Output, State, ctx
 import plotly.graph_objects as go
 import plotly.express as px
-import os
+
 
 # ----------------------------
 # CONFIG
@@ -33,9 +32,10 @@ DEFICIT_COL = "deficit"
 THR_DEFAULT = 0.40
 WINDOW_OPTIONS = [4, 6, 8, 10, 12]
 
+# Intervalo del play de años
 INTERVAL_YEAR_MS = 2200
 
-# Animación de giro (solo cuando cambia país)
+# Animación de giro cuando cambia país
 INTERVAL_TURN_MS = 35
 TURN_FRAMES = 30
 
@@ -82,40 +82,56 @@ def corr_matrix(sub: pd.DataFrame, metric: str) -> pd.DataFrame:
 
 def build_graph_from_corr(C: pd.DataFrame, thr: float) -> nx.Graph:
     G = nx.Graph()
+
     for n in C.columns:
         G.add_node(n)
 
     cols = list(C.columns)
+
     for i, a in enumerate(cols):
-        for b in cols[i+1:]:
+        for b in cols[i + 1:]:
             w = C.loc[a, b]
             if pd.notna(w) and abs(w) >= thr:
-                G.add_edge(a, b, weight=float(abs(w)), signed_weight=float(w))
+                G.add_edge(
+                    a,
+                    b,
+                    weight=float(abs(w)),
+                    signed_weight=float(w)
+                )
+
     return G
 
 
 def louvain_partition(G: nx.Graph) -> Dict[str, int]:
     if G.number_of_edges() == 0:
         return {n: i for i, n in enumerate(G.nodes())}
-    return community_louvain.best_partition(G, weight="weight", random_state=42)
+
+    return community_louvain.best_partition(
+        G,
+        weight="weight",
+        random_state=42
+    )
 
 
 # ----------------------------
 # EASING
 # ----------------------------
 def ease_in_out(t: float) -> float:
-    # t in [0,1]
     return 0.5 - 0.5 * math.cos(math.pi * t)
 
 
 # ----------------------------
 # WHEEL POSITIONS
-# - selected fijo arriba (0,1)
-# - el resto rota con rotation_phase
 # ----------------------------
-def wheel_positions(nodes: List[str], selected: Optional[str], rotation_phase: float) -> Dict[str, Tuple[float, float]]:
+def wheel_positions(
+    nodes: List[str],
+    selected: Optional[str],
+    rotation_phase: float
+) -> Dict[str, Tuple[float, float]]:
+
     nodes = sorted(nodes)
     n = len(nodes)
+
     if n == 0:
         return {}
 
@@ -123,11 +139,14 @@ def wheel_positions(nodes: List[str], selected: Optional[str], rotation_phase: f
 
     if selected in nodes and n > 1:
         pos[selected] = (0.0, 1.0)
+
         others = [x for x in nodes if x != selected]
         m = len(others)
+
         for i, node in enumerate(others):
             a = rotation_phase + 2 * math.pi * i / m
             pos[node] = (math.cos(a), math.sin(a))
+
     else:
         for i, node in enumerate(nodes):
             a = rotation_phase + 2 * math.pi * i / n
@@ -154,62 +173,78 @@ def make_ruleta_figure(
     pos = wheel_positions(nodes, selected, rotation_phase)
     fig = go.Figure()
 
-    # edges solo desde selected a neighbors
+    # Edges solo desde selected a neighbors
     if selected and selected in pos:
         x0, y0 = pos[selected]
+
         for nb in sorted(neighbors):
             if nb not in pos:
                 continue
+
             x1, y1 = pos[nb]
             w = abs(corr_of_selected.get(nb, 0.0))
+
             if w < thr:
                 continue
 
             width = 1.4 + 6.2 * min(1.0, w)
 
-            # glow
+            # Glow
             fig.add_trace(go.Scatter(
-                x=[x0, x1], y=[y0, y1],
+                x=[x0, x1],
+                y=[y0, y1],
                 mode="lines",
                 line=dict(width=width + 6, color=EDGE_GLOW),
                 hoverinfo="skip",
                 showlegend=False
             ))
-            # main
+
+            # Main edge
             fig.add_trace(go.Scatter(
-                x=[x0, x1], y=[y0, y1],
+                x=[x0, x1],
+                y=[y0, y1],
                 mode="lines",
                 line=dict(width=width, color=EDGE_COL),
                 hoverinfo="skip",
                 showlegend=False
             ))
 
-    # colores por comunidad
+    # Colores por comunidad
     comm_ids = sorted(set(part.values()))
     palette = px.colors.qualitative.Set3
-    comm_color = {c: palette[i % len(palette)] for i, c in enumerate(comm_ids)}
+    comm_color = {
+        c: palette[i % len(palette)]
+        for i, c in enumerate(comm_ids)
+    }
 
     xs_dim, ys_dim, text_dim, hover_dim = [], [], [], []
     xs_lit, ys_lit, text_lit, hover_lit, color_lit, size_lit = [], [], [], [], [], []
-
     xs_halo, ys_halo, halo_size, halo_color = [], [], [], []
 
     for n in nodes:
         if n not in pos:
             continue
+
         x, y = pos[n]
         comm = part.get(n, -1)
         cname = iso_to_name.get(n, n)
         hover = f"<b>{cname}</b><br>ISO: {n}<br>Comunidad: {comm}"
 
-        is_dim = (selected is not None) and (n != selected) and (n not in neighbors)
+        is_dim = (
+            selected is not None
+            and n != selected
+            and n not in neighbors
+        )
 
         if is_dim:
-            xs_dim.append(x); ys_dim.append(y)
+            xs_dim.append(x)
+            ys_dim.append(y)
             text_dim.append(n)
             hover_dim.append(hover)
+
         else:
-            xs_lit.append(x); ys_lit.append(y)
+            xs_lit.append(x)
+            ys_lit.append(y)
             text_lit.append(n)
             hover_lit.append(hover)
 
@@ -222,28 +257,38 @@ def make_ruleta_figure(
                 size = 18
             else:
                 size = 14
+
             size_lit.append(size)
 
             if n == selected:
-                xs_halo.append(x); ys_halo.append(y)
+                xs_halo.append(x)
+                ys_halo.append(y)
                 halo_size.append(size + 22)
                 halo_color.append("rgba(255,255,255,0.18)")
+
             elif n in neighbors:
-                xs_halo.append(x); ys_halo.append(y)
+                xs_halo.append(x)
+                ys_halo.append(y)
                 halo_size.append(size + 16)
                 halo_color.append("rgba(255,255,255,0.10)")
 
     if xs_halo:
         fig.add_trace(go.Scatter(
-            x=xs_halo, y=ys_halo,
+            x=xs_halo,
+            y=ys_halo,
             mode="markers",
-            marker=dict(size=halo_size, color=halo_color, line=dict(width=0)),
+            marker=dict(
+                size=halo_size,
+                color=halo_color,
+                line=dict(width=0)
+            ),
             hoverinfo="skip",
             showlegend=False
         ))
 
     fig.add_trace(go.Scatter(
-        x=xs_dim, y=ys_dim,
+        x=xs_dim,
+        y=ys_dim,
         mode="markers+text",
         text=text_dim,
         textposition="top center",
@@ -255,7 +300,8 @@ def make_ruleta_figure(
     ))
 
     fig.add_trace(go.Scatter(
-        x=xs_lit, y=ys_lit,
+        x=xs_lit,
+        y=ys_lit,
         mode="markers+text",
         text=text_lit,
         textposition="top center",
@@ -279,7 +325,9 @@ def make_ruleta_figure(
         yaxis=dict(visible=False, range=[-1.25, 1.25]),
         height=820,
         margin=dict(l=30, r=30, t=60, b=30),
+        datarevision=str(rotation_phase)
     )
+
     return fig
 
 
@@ -287,7 +335,13 @@ def make_ruleta_figure(
 # APP
 # ----------------------------
 df = load_and_prepare(CSV_PATH)
-iso_to_name = df[[ISO_COL, NAME_COL]].drop_duplicates().set_index(ISO_COL)[NAME_COL].to_dict()
+
+iso_to_name = (
+    df[[ISO_COL, NAME_COL]]
+    .drop_duplicates()
+    .set_index(ISO_COL)[NAME_COL]
+    .to_dict()
+)
 
 min_year = int(df[YEAR_COL].min())
 max_year = int(df[YEAR_COL].max())
@@ -295,122 +349,254 @@ all_countries = sorted(df[ISO_COL].dropna().unique().tolist())
 
 app = Dash(__name__)
 server = app.server
-app.title = "Ruleta fiscal (evento2)"
+app.title = "Ruleta fiscal"
 
-app.layout = html.Div(style={"backgroundColor": BG, "color": FG, "minHeight": "100vh", "padding": "18px"}, children=[
+app.layout = html.Div(
+    style={
+        "backgroundColor": BG,
+        "color": FG,
+        "minHeight": "100vh",
+        "padding": "18px"
+    },
+    children=[
 
-    html.H2("Red fiscal europea — Ruleta interactiva (Louvain)", style={"marginBottom": "8px"}),
+        html.H2(
+            "Red fiscal europea — Ruleta interactiva (Louvain)",
+            style={"marginBottom": "8px"}
+        ),
 
-    # Stores
-    dcc.Store(id="store_selected_country", data=None),
-    dcc.Store(id="store_playing_year", data=False),
+        # Stores
+        dcc.Store(id="store_selected_country", data=None),
 
-    # Rotación
-    dcc.Store(id="store_rotation_phase", data=0.0),
-    dcc.Store(id="store_turn_active", data=False),
-    dcc.Store(id="store_turn_step", data=0),
-    dcc.Store(id="store_turn_from", data=0.0),
-    dcc.Store(id="store_turn_to", data=0.0),
-    dcc.Store(id="store_selected_prev", data=None),
+        # Rotación
+        dcc.Store(id="store_rotation_phase", data=0.0),
+        dcc.Store(id="store_turn_active", data=False),
+        dcc.Store(id="store_turn_step", data=0),
+        dcc.Store(id="store_turn_from", data=0.0),
+        dcc.Store(id="store_turn_to", data=0.0),
+        dcc.Store(id="store_selected_prev", data=None),
 
-    html.Div(style={"display": "grid", "gridTemplateColumns": "1.2fr 0.8fr 0.9fr 0.6fr", "gap": "14px", "alignItems": "center"}, children=[
+        html.Div(
+            style={
+                "display": "grid",
+                "gridTemplateColumns": "1.2fr 0.8fr 0.9fr 0.6fr",
+                "gap": "14px",
+                "alignItems": "center"
+            },
+            children=[
 
-        html.Div(children=[
-            html.Div("Año (fin de ventana)", style={"fontSize": "12px", "opacity": 0.9}),
-            dcc.Slider(
-                id="year",
-                min=min_year,
-                max=max_year,
-                step=1,
-                value=max_year,
-                marks={y: str(y) for y in range(min_year, max_year + 1, 3)},
-                tooltip={"placement": "bottom", "always_visible": True},
-            )
-        ]),
+                html.Div(children=[
+                    html.Div(
+                        "Año (fin de ventana)",
+                        style={"fontSize": "12px", "opacity": 0.9}
+                    ),
+                    dcc.Slider(
+                        id="year",
+                        min=min_year,
+                        max=max_year,
+                        step=1,
+                        value=max_year,
+                        marks={
+                            y: str(y)
+                            for y in range(min_year, max_year + 1, 3)
+                        },
+                        tooltip={
+                            "placement": "bottom",
+                            "always_visible": True
+                        },
+                    )
+                ]),
 
-        html.Div(children=[
-            html.Div("Ventana (años)", style={"fontSize": "12px", "opacity": 0.9}),
-            dcc.Dropdown(
-                id="window",
-                options=[{"label": str(w), "value": w} for w in WINDOW_OPTIONS],
-                value=8,
-                clearable=False
-            )
-        ]),
+                html.Div(children=[
+                    html.Div(
+                        "Ventana (años)",
+                        style={"fontSize": "12px", "opacity": 0.9}
+                    ),
+                    dcc.Dropdown(
+                        id="window",
+                        options=[
+                            {"label": str(w), "value": w}
+                            for w in WINDOW_OPTIONS
+                        ],
+                        value=8,
+                        clearable=False
+                    )
+                ]),
 
-        html.Div(children=[
-            html.Div("Métrica", style={"fontSize": "12px", "opacity": 0.9}),
-            dcc.RadioItems(
-                id="metric",
-                options=[
-                    {"label": "ΔDeuda (d_debt)", "value": "d_debt"},
-                    {"label": "ΔPresión de déficit (d_deficit_pressure)", "value": "d_deficit_pressure"},
-                ],
-                value="d_debt",
-                labelStyle={"display": "block", "marginRight": "10px"},
-            ),
-        ]),
+                html.Div(children=[
+                    html.Div(
+                        "Métrica",
+                        style={"fontSize": "12px", "opacity": 0.9}
+                    ),
+                    dcc.RadioItems(
+                        id="metric",
+                        options=[
+                            {
+                                "label": "ΔDeuda (d_debt)",
+                                "value": "d_debt"
+                            },
+                            {
+                                "label": "ΔPresión de déficit (d_deficit_pressure)",
+                                "value": "d_deficit_pressure"
+                            },
+                        ],
+                        value="d_debt",
+                        labelStyle={
+                            "display": "block",
+                            "marginRight": "10px"
+                        },
+                    ),
+                ]),
 
-        html.Div(style={"display": "flex", "justifyContent": "flex-end", "gap": "10px"}, children=[
-            html.Button("▶ Play", id="btn_play", n_clicks=0, style={"padding": "6px 10px"}),
-            html.Button("⏸ Pause", id="btn_pause", n_clicks=0, style={"padding": "6px 10px"}),
-        ]),
-    ]),
+                html.Div(
+                    style={
+                        "display": "flex",
+                        "justifyContent": "flex-end",
+                        "gap": "10px"
+                    },
+                    children=[
+                        html.Button(
+                            "▶ Play",
+                            id="btn_play",
+                            n_clicks=0,
+                            style={"padding": "6px 10px"}
+                        ),
+                        html.Button(
+                            "⏸ Pause",
+                            id="btn_pause",
+                            n_clicks=0,
+                            style={"padding": "6px 10px"}
+                        ),
+                    ]
+                ),
+            ]
+        ),
 
-    html.Div(id="status_line", style={"marginTop": "10px", "opacity": 0.9, "fontSize": "13px"}),
+        html.Div(
+            id="status_line",
+            style={
+                "marginTop": "10px",
+                "opacity": 0.9,
+                "fontSize": "13px"
+            }
+        ),
 
-    html.Div(style={"display": "grid", "gridTemplateColumns": "2.2fr 1fr", "gap": "14px", "marginTop": "10px"}, children=[
+        html.Div(
+            style={
+                "display": "grid",
+                "gridTemplateColumns": "2.2fr 1fr",
+                "gap": "14px",
+                "marginTop": "10px"
+            },
+            children=[
 
-        dcc.Graph(
-    id="wheel",
-    config={"displayModeBar": True, "scrollZoom": False},
-    style={"backgroundColor": BG, "borderRadius": "10px"}
-),
+                dcc.Graph(
+                    id="wheel",
+                    config={
+                        "displayModeBar": True,
+                        "scrollZoom": False,
+                        "responsive": True
+                    },
+                    style={
+                        "backgroundColor": BG,
+                        "borderRadius": "10px"
+                    }
+                ),
 
-        html.Div(style={"backgroundColor": PANEL_BG, "border": PANEL_BORDER,
-                        "borderRadius": "10px", "padding": "12px"}, children=[
+                html.Div(
+                    style={
+                        "backgroundColor": PANEL_BG,
+                        "border": PANEL_BORDER,
+                        "borderRadius": "10px",
+                        "padding": "12px"
+                    },
+                    children=[
 
-            html.H4("Panel del país", style={"marginTop": "0px"}),
+                        html.H4(
+                            "Panel del país",
+                            style={"marginTop": "0px"}
+                        ),
 
-            html.Div("Seleccionar país (opcional)", style={"fontSize": "12px", "opacity": 0.85}),
-            dcc.Dropdown(
-                id="country_dropdown",
-                options=[{"label": f"{iso_to_name.get(c,c)} ({c})", "value": c} for c in all_countries],
-                value=None,
-                placeholder="(o haz click en la ruleta)",
-                clearable=True
-            ),
+                        html.Div(
+                            "Seleccionar país (opcional)",
+                            style={"fontSize": "12px", "opacity": 0.85}
+                        ),
 
-            html.Div(style={"height": "10px"}),
+                        dcc.Dropdown(
+                            id="country_dropdown",
+                            options=[
+                                {
+                                    "label": f"{iso_to_name.get(c, c)} ({c})",
+                                    "value": c
+                                }
+                                for c in all_countries
+                            ],
+                            value=None,
+                            placeholder="(o haz click en la ruleta)",
+                            clearable=True
+                        ),
 
-            html.Div("Filtrar vecinos por comunidad (del año actual)", style={"fontSize": "12px", "opacity": 0.85}),
-            dcc.Dropdown(
-                id="community_filter",
-                options=[{"label": "Todas", "value": "ALL"}],
-                value="ALL",
-                clearable=False
-            ),
+                        html.Div(style={"height": "10px"}),
 
-            html.Div(style={"height": "14px"}),
+                        html.Div(
+                            "Filtrar vecinos por comunidad (del año actual)",
+                            style={"fontSize": "12px", "opacity": 0.85}
+                        ),
 
-            html.Div("Top conexiones (vecinos) por correlación:", style={"fontSize": "12px", "opacity": 0.85}),
-            html.Div(id="neighbors_list", style={"fontSize": "12px", "whiteSpace": "pre-line", "marginTop": "8px"}),
+                        dcc.Dropdown(
+                            id="community_filter",
+                            options=[
+                                {"label": "Todas", "value": "ALL"}
+                            ],
+                            value="ALL",
+                            clearable=False
+                        ),
 
-            html.Div(style={"height": "10px"}),
+                        html.Div(style={"height": "14px"}),
 
-            html.Div("Tip: click en un país para fijarlo. Hover: nombre completo + comunidad.", style={"fontSize": "11px", "opacity": 0.6}),
-        ])
-    ]),
+                        html.Div(
+                            "Top conexiones (vecinos) por correlación:",
+                            style={"fontSize": "12px", "opacity": 0.85}
+                        ),
 
-    # intervals
-    dcc.Interval(id="interval_year", interval=INTERVAL_YEAR_MS, n_intervals=0, disabled=True),
-    dcc.Interval(id="interval_turn", interval=INTERVAL_TURN_MS, n_intervals=0, disabled=True),
-])
+                        html.Div(
+                            id="neighbors_list",
+                            style={
+                                "fontSize": "12px",
+                                "whiteSpace": "pre-line",
+                                "marginTop": "8px"
+                            }
+                        ),
+
+                        html.Div(style={"height": "10px"}),
+
+                        html.Div(
+                            "Tip: click en un país para fijarlo. Hover: nombre completo + comunidad.",
+                            style={"fontSize": "11px", "opacity": 0.6}
+                        ),
+                    ]
+                )
+            ]
+        ),
+
+        # Intervals
+        dcc.Interval(
+            id="interval_year",
+            interval=INTERVAL_YEAR_MS,
+            n_intervals=0,
+            disabled=True
+        ),
+
+        dcc.Interval(
+            id="interval_turn",
+            interval=INTERVAL_TURN_MS,
+            n_intervals=0,
+            disabled=True
+        ),
+    ]
+)
 
 
-# ----------------------------
-# PLAY/PAUSE YEAR
-# ----------------------------
 # ----------------------------
 # PLAY/PAUSE YEAR
 # ----------------------------
@@ -438,11 +624,11 @@ def tick_year(n, year):
         year = min_year
 
     y = int(year)
-    return min_year if y >= max_year else (y + 1)
+    return min_year if y >= max_year else y + 1
 
 
 # ----------------------------
-# SELECT COUNTRY (click or dropdown)
+# SELECT COUNTRY
 # ----------------------------
 @app.callback(
     Output("store_selected_country", "data"),
@@ -454,26 +640,31 @@ def tick_year(n, year):
 def set_selected(clickData, dropdown_value, stored):
     trig = ctx.triggered_id
 
-    if trig == "wheel" and clickData and "points" in clickData and clickData["points"]:
+    if (
+        trig == "wheel"
+        and clickData
+        and "points" in clickData
+        and clickData["points"]
+    ):
         pt = clickData["points"][0]
         iso = pt.get("customdata") or pt.get("text")
+
         if iso in all_countries:
             return iso, iso
+
         return stored, stored
 
     if trig == "country_dropdown":
         if dropdown_value in all_countries:
             return dropdown_value, dropdown_value
+
         return None, None
 
     return stored, stored
 
 
 # ----------------------------
-# UN SOLO CALLBACK PARA LA ANIMACIÓN DE GIRO
-# - Detecta cambio de país
-# - Si cambia: inicializa animación y habilita interval_turn
-# - Si interval_turn hace tick: avanza fase, y al final lo deshabilita
+# TURN CONTROLLER
 # ----------------------------
 @app.callback(
     Output("store_rotation_phase", "data"),
@@ -492,7 +683,16 @@ def set_selected(clickData, dropdown_value, stored):
     State("store_turn_to", "data"),
     State("store_selected_prev", "data"),
 )
-def turn_controller(selected, n_tick, phase_now, active, step, ph_from, ph_to, prev_selected):
+def turn_controller(
+    selected,
+    n_tick,
+    phase_now,
+    active,
+    step,
+    ph_from,
+    ph_to,
+    prev_selected
+):
     trig = ctx.triggered_id
 
     phase_now = float(phase_now)
@@ -501,49 +701,101 @@ def turn_controller(selected, n_tick, phase_now, active, step, ph_from, ph_to, p
     ph_from = float(ph_from)
     ph_to = float(ph_to)
 
-    # 1) evento: cambio país
+    # Evento: cambio de país
     if trig == "store_selected_country":
-        # si no cambia, nada
         if selected == prev_selected:
-            return phase_now, active, step, ph_from, ph_to, prev_selected, (not active)
+            return (
+                phase_now,
+                active,
+                step,
+                ph_from,
+                ph_to,
+                prev_selected,
+                not active
+            )
 
-        # si selected None -> no animamos
         if selected is None:
-            return phase_now, False, 0, phase_now, phase_now, None, True
+            return (
+                phase_now,
+                False,
+                0,
+                phase_now,
+                phase_now,
+                None,
+                True
+            )
 
-        # inicializa animación
         from_phase = phase_now
-        # giro corto "bonito" hacia delante (120º)
         target = (from_phase + 2 * math.pi / 3) % (2 * math.pi)
 
-        return phase_now, True, 0, from_phase, target, selected, False
+        return (
+            phase_now,
+            True,
+            0,
+            from_phase,
+            target,
+            selected,
+            False
+        )
 
-    # 2) ticks del interval_turn
+    # Ticks de animación
     if trig == "interval_turn":
         if not active:
-            return phase_now, False, 0, ph_from, ph_to, prev_selected, True
+            return (
+                phase_now,
+                False,
+                0,
+                ph_from,
+                ph_to,
+                prev_selected,
+                True
+            )
 
-        t = step / max(1, (TURN_FRAMES - 1))
+        t = step / max(1, TURN_FRAMES - 1)
         tt = ease_in_out(t)
 
         a = ph_from
         b = ph_to
 
-        # distancia angular corta
         diff = (b - a + math.pi) % (2 * math.pi) - math.pi
         ph = (a + diff * tt) % (2 * math.pi)
 
         step_next = step + 1
+
         if step_next >= TURN_FRAMES:
-            return (ph_to % (2 * math.pi)), False, 0, ph_to, ph_to, prev_selected, True
+            return (
+                ph_to % (2 * math.pi),
+                False,
+                0,
+                ph_to,
+                ph_to,
+                prev_selected,
+                True
+            )
 
-        return ph, True, step_next, ph_from, ph_to, prev_selected, False
+        return (
+            ph,
+            True,
+            step_next,
+            ph_from,
+            ph_to,
+            prev_selected,
+            False
+        )
 
-    return phase_now, active, step, ph_from, ph_to, prev_selected, (not active)
+    return (
+        phase_now,
+        active,
+        step,
+        ph_from,
+        ph_to,
+        prev_selected,
+        not active
+    )
 
 
 # ----------------------------
-# MAIN UPDATE (figure + panel)
+# MAIN UPDATE
 # ----------------------------
 @app.callback(
     Output("wheel", "figure"),
@@ -558,7 +810,14 @@ def turn_controller(selected, n_tick, phase_now, active, step, ph_from, ph_to, p
     Input("community_filter", "value"),
     Input("store_rotation_phase", "data"),
 )
-def update_all(year, window, metric, selected_country, community_value, rotation_phase):
+def update_all(
+    year,
+    window,
+    metric,
+    selected_country,
+    community_value,
+    rotation_phase
+):
     year = int(year)
     window = int(window)
 
@@ -569,44 +828,63 @@ def update_all(year, window, metric, selected_country, community_value, rotation
     part = louvain_partition(G)
 
     nodes = list(C.columns)
-    selected = selected_country if (selected_country in nodes) else None
+    selected = (
+        selected_country
+        if selected_country in nodes
+        else None
+    )
 
     neighbors_all: List[Tuple[str, float]] = []
     corr_of_selected: Dict[str, float] = {}
 
     if selected is not None and selected in C.columns:
         s = C[selected].drop(index=selected, errors="ignore")
+
         for nb, val in s.items():
             if pd.notna(val) and abs(val) >= THR_DEFAULT:
                 corr_of_selected[nb] = float(val)
                 neighbors_all.append((nb, float(val)))
 
-    neighbors_all.sort(key=lambda t: abs(t[1]), reverse=True)
+    neighbors_all.sort(
+        key=lambda t: abs(t[1]),
+        reverse=True
+    )
 
     comms_present = []
+
     if selected is not None:
         seen = set()
+
         for nb, _ in neighbors_all:
             comm = part.get(nb, None)
+
             if comm is None:
                 continue
+
             if comm not in seen:
                 seen.add(comm)
                 comms_present.append(comm)
+
         comms_present = sorted(comms_present)
 
     options = [{"label": "Todas", "value": "ALL"}]
+
     for c in comms_present:
-        options.append({"label": f"Comunidad {c}", "value": str(c)})
+        options.append(
+            {"label": f"Comunidad {c}", "value": str(c)}
+        )
 
     if community_value is None:
         community_value = "ALL"
+
     if community_value != "ALL":
-        valid = set([o["value"] for o in options])
+        valid = {o["value"] for o in options}
+
         if community_value not in valid:
             community_value = "ALL"
 
     neighbors_filtered: Set[str] = set()
+
     if selected is not None:
         for nb, val in neighbors_all:
             if community_value == "ALL":
@@ -616,37 +894,76 @@ def update_all(year, window, metric, selected_country, community_value, rotation
                     neighbors_filtered.add(nb)
 
     if selected is None:
-        neighbors_text = "Selecciona un país (click o desplegable) para ver sus conexiones."
+        neighbors_text = (
+            "Selecciona un país (click o desplegable) "
+            "para ver sus conexiones."
+        )
         comm_of_selected = "-"
+
     else:
         comm_of_selected = part.get(selected, "-")
+
         if len(neighbors_filtered) == 0:
-            neighbors_text = "No hay vecinos (con el umbral actual / filtro de comunidades)."
+            neighbors_text = (
+                "No hay vecinos "
+                "(con el umbral actual / filtro de comunidades)."
+            )
+
         else:
             lines = []
+
             for nb, val in neighbors_all:
                 if nb not in neighbors_filtered:
                     continue
+
                 sign = "+" if val >= 0 else "-"
                 cname = iso_to_name.get(nb, nb)
-                lines.append(f"• {cname} ({nb}) | Comunidad {part.get(nb,'-')} | corr={abs(val):.2f} (signo {sign})")
+
+                lines.append(
+                    f"• {cname} ({nb}) | "
+                    f"Comunidad {part.get(nb, '-')} | "
+                    f"corr={abs(val):.2f} (signo {sign})"
+                )
+
                 if len(lines) >= 12:
                     break
+
             neighbors_text = "\n".join(lines)
 
     start_y = year - window + 1
-    metric_name = "Δdebt" if metric == "d_debt" else "Δpresión déficit"
+    metric_name = (
+        "Δdebt"
+        if metric == "d_debt"
+        else "Δpresión déficit"
+    )
 
     if selected is None:
-        status = f"Sin país seleccionado | Ventana {start_y}–{year} (thr={THR_DEFAULT}) | Métrica: {metric_name}"
-    else:
-        status = f"País seleccionado: {iso_to_name.get(selected, selected)} ({selected}) | Comunidad: {comm_of_selected} | Ventana {start_y}–{year} (thr={THR_DEFAULT})"
+        status = (
+            f"Sin país seleccionado | "
+            f"Ventana {start_y}–{year} "
+            f"(thr={THR_DEFAULT}) | "
+            f"Métrica: {metric_name}"
+        )
 
-    fig_title = f"Ruleta fiscal | {metric_name} | Ventana {start_y}–{year} (thr={THR_DEFAULT})"
+    else:
+        status = (
+            f"País seleccionado: "
+            f"{iso_to_name.get(selected, selected)} ({selected}) | "
+            f"Comunidad: {comm_of_selected} | "
+            f"Ventana {start_y}–{year} "
+            f"(thr={THR_DEFAULT})"
+        )
+
+    fig_title = (
+        f"Ruleta fiscal | {metric_name} | "
+        f"Ventana {start_y}–{year} "
+        f"(thr={THR_DEFAULT})"
+    )
+
     if selected is not None:
         fig_title += f" | País: {selected}"
 
-        fig = make_ruleta_figure(
+    fig = make_ruleta_figure(
         nodes=nodes,
         part=part,
         iso_to_name=iso_to_name,
@@ -659,21 +976,13 @@ def update_all(year, window, metric, selected_country, community_value, rotation
     )
 
     fig.update_layout(
-    datarevision=f"{year}-{window}-{metric}-{selected}-{community_value}-{rotation_phase}"
-)
-
-    graph = dcc.Graph(
-        id="wheel",
-        figure=fig,
-        config={"displayModeBar": True, "scrollZoom": False, "responsive": True},
-        style={"backgroundColor": BG, "borderRadius": "10px"}
+        datarevision=f"{year}-{window}-{metric}-{selected}-{community_value}-{rotation_phase}"
     )
-    
-    return graph, status, options, community_value, neighbors_text
+
+    return fig, status, options, community_value, neighbors_text
 
 
 if __name__ == "__main__":
-    # Si tienes otro Dash en el mismo puerto, cámbialo (ej: 8051)
     app.run(
         debug=False,
         host="0.0.0.0",
