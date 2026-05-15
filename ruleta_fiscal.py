@@ -668,13 +668,37 @@ def update_all(year, window, metric, selected_country, community_value, rotation
 app.clientside_callback(
     """
     function(year, figure) {
-        setTimeout(function() {
-            window.dispatchEvent(new Event('resize'));
-        }, 80);
+        function forcePlotlyRedraw() {
+            const graph = document.getElementById("wheel");
+            if (!graph || !figure || !window.Plotly) {
+                return;
+            }
 
-        setTimeout(function() {
-            window.dispatchEvent(new Event('resize'));
-        }, 300);
+            const plot = graph.querySelector(".js-plotly-plot");
+            if (!plot) {
+                return;
+            }
+
+            window.Plotly.react(
+                plot,
+                figure.data,
+                figure.layout,
+                {
+                    displayModeBar: true,
+                    scrollZoom: false,
+                    responsive: true
+                }
+            );
+
+            window.Plotly.Plots.resize(plot);
+        }
+
+        requestAnimationFrame(function() {
+            forcePlotlyRedraw();
+        });
+
+        setTimeout(forcePlotlyRedraw, 100);
+        setTimeout(forcePlotlyRedraw, 350);
 
         return String(Date.now());
     }
