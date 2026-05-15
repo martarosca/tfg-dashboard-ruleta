@@ -33,7 +33,7 @@ DEFICIT_COL = "deficit"
 THR_DEFAULT = 0.40
 WINDOW_OPTIONS = [4, 6, 8, 10, 12]
 
-INTERVAL_YEAR_MS = 900
+INTERVAL_YEAR_MS = 2200
 
 # Animación de giro (solo cuando cambia país)
 INTERVAL_TURN_MS = 35
