@@ -304,7 +304,6 @@ app.layout = html.Div(style={"backgroundColor": BG, "color": FG, "minHeight": "1
     # Stores
     dcc.Store(id="store_selected_country", data=None),
     dcc.Store(id="store_playing_year", data=False),
-    html.Div(id="force_redraw", style={"display": "none"}),
 
     # Rotación
     dcc.Store(id="store_rotation_phase", data=0.0),
@@ -362,10 +361,15 @@ app.layout = html.Div(style={"backgroundColor": BG, "color": FG, "minHeight": "1
 
     html.Div(style={"display": "grid", "gridTemplateColumns": "2.2fr 1fr", "gap": "14px", "marginTop": "10px"}, children=[
 
-        dcc.Graph(
-            id="wheel",
-            config={"displayModeBar": True, "scrollZoom": False},
-            style={"backgroundColor": BG, "borderRadius": "10px"}
+        html.Div(
+            id="wheel_container",
+            children=[
+                dcc.Graph(
+                    id="wheel",
+                    config={"displayModeBar": True, "scrollZoom": False, "responsive": True},
+                    style={"backgroundColor": BG, "borderRadius": "10px"}
+                )
+            ]
         ),
 
         html.Div(style={"backgroundColor": PANEL_BG, "border": PANEL_BORDER,
@@ -660,53 +664,17 @@ def update_all(year, window, metric, selected_country, community_value, rotation
     )
 
     fig.update_layout(
-        datarevision=f"{year}-{window}-{metric}-{selected}-{community_value}-{rotation_phase}"
-    )
-
-    return fig, status, options, community_value, neighbors_text
-
-app.clientside_callback(
-    """
-    function(year, figure) {
-        function forcePlotlyRedraw() {
-            const graph = document.getElementById("wheel");
-            if (!graph || !figure || !window.Plotly) {
-                return;
-            }
-
-            const plot = graph.querySelector(".js-plotly-plot");
-            if (!plot) {
-                return;
-            }
-
-            window.Plotly.react(
-                plot,
-                figure.data,
-                figure.layout,
-                {
-                    displayModeBar: true,
-                    scrollZoom: false,
-                    responsive: true
-                }
-            );
-
-            window.Plotly.Plots.resize(plot);
-        }
-
-        requestAnimationFrame(function() {
-            forcePlotlyRedraw();
-        });
-
-        setTimeout(forcePlotlyRedraw, 100);
-        setTimeout(forcePlotlyRedraw, 350);
-
-        return String(Date.now());
-    }
-    """,
-    Output("force_redraw", "children"),
-    Input("year", "value"),
-    Input("wheel", "figure")
+    datarevision=f"{year}-{window}-{metric}-{selected}-{community_value}-{rotation_phase}"
 )
+
+    graph = dcc.Graph(
+        id="wheel",
+        figure=fig,
+        config={"displayModeBar": True, "scrollZoom": False, "responsive": True},
+        style={"backgroundColor": BG, "borderRadius": "10px"}
+    )
+    
+    return graph, status, options, community_value, neighbors_text
 
 
 if __name__ == "__main__":
