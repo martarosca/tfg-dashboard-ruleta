@@ -304,6 +304,7 @@ app.layout = html.Div(style={"backgroundColor": BG, "color": FG, "minHeight": "1
     # Stores
     dcc.Store(id="store_selected_country", data=None),
     dcc.Store(id="store_playing_year", data=False),
+    html.Div(id="force_redraw", style={"display": "none"}),
 
     # Rotación
     dcc.Store(id="store_rotation_phase", data=0.0),
@@ -317,11 +318,14 @@ app.layout = html.Div(style={"backgroundColor": BG, "color": FG, "minHeight": "1
 
         html.Div(children=[
             html.Div("Año (fin de ventana)", style={"fontSize": "12px", "opacity": 0.9}),
-            dcc.Dropdown(
+            dcc.Slider(
                 id="year",
-                options=[{"label": str(y), "value": y} for y in range(min_year, max_year + 1)],
+                min=min_year,
+                max=max_year,
+                step=1,
                 value=max_year,
-                clearable=False
+                marks={y: str(y) for y in range(min_year, max_year + 1, 3)},
+                tooltip={"placement": "bottom", "always_visible": True},
             )
         ]),
 
@@ -644,18 +648,41 @@ def update_all(year, window, metric, selected_country, community_value, rotation
         fig_title += f" | País: {selected}"
 
     fig = make_ruleta_figure(
-        nodes=nodes,
-        part=part,
-        iso_to_name=iso_to_name,
-        selected=selected,
-        neighbors=neighbors_filtered,
-        corr_of_selected=corr_of_selected,
-        thr=THR_DEFAULT,
-        title=fig_title,
-        rotation_phase=float(rotation_phase)
-    )
+    nodes=nodes,
+    part=part,
+    iso_to_name=iso_to_name,
+    selected=selected,
+    neighbors=neighbors_filtered,
+    corr_of_selected=corr_of_selected,
+    thr=THR_DEFAULT,
+    title=fig_title,
+    rotation_phase=float(rotation_phase)
+)
 
-    return fig, status, options, community_value, neighbors_text
+fig.update_layout(
+    datarevision=f"{year}-{window}-{metric}-{selected}-{community_value}-{rotation_phase}"
+)
+
+return fig, status, options, community_value, neighbors_text
+
+app.clientside_callback(
+    """
+    function(year, figure) {
+        setTimeout(function() {
+            window.dispatchEvent(new Event('resize'));
+        }, 80);
+
+        setTimeout(function() {
+            window.dispatchEvent(new Event('resize'));
+        }, 300);
+
+        return String(Date.now());
+    }
+    """,
+    Output("force_redraw", "children"),
+    Input("year", "value"),
+    Input("wheel", "figure")
+)
 
 
 if __name__ == "__main__":
