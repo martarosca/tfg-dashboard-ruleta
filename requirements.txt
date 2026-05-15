@@ -4,3 +4,4 @@ numpy
 networkx
 python-louvain
 plotly
+gunicorn
