@@ -361,16 +361,11 @@ app.layout = html.Div(style={"backgroundColor": BG, "color": FG, "minHeight": "1
 
     html.Div(style={"display": "grid", "gridTemplateColumns": "2.2fr 1fr", "gap": "14px", "marginTop": "10px"}, children=[
 
-        html.Div(
-            id="wheel_container",
-            children=[
-                dcc.Graph(
-                    id="wheel",
-                    config={"displayModeBar": True, "scrollZoom": False, "responsive": True},
-                    style={"backgroundColor": BG, "borderRadius": "10px"}
-                )
-            ]
-        ),
+        dcc.Graph(
+    id="wheel",
+    config={"displayModeBar": True, "scrollZoom": False},
+    style={"backgroundColor": BG, "borderRadius": "10px"}
+),
 
         html.Div(style={"backgroundColor": PANEL_BG, "border": PANEL_BORDER,
                         "borderRadius": "10px", "padding": "12px"}, children=[
